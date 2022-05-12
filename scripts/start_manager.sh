@@ -5,7 +5,7 @@ PYTHON_DIRECTORY="${HOME_DIRECTORY}/python"
 SDN_DIRECTORY="${PYTHON_DIRECTORY}/sdn"
 
 SNORT_INTERFACE="s1-snort"
-SNORT_COMMAND="snort -i ${SNORT_INTERFACE} -A alert-unixsock -l /tmp -c /etc/snort/snort.lua"
+SNORT_COMMAND="snort -i ${SNORT_INTERFACE} -l /tmp -c /etc/snort/snort.lua -A alert-unixsock"
 SNORT_LOGS="snort.logs"
 
 RYU_MANAGER_COMMAND="ryu-manager ${SDN_DIRECTORY}/core_controller.py ${SDN_DIRECTORY}/application.py"
@@ -72,8 +72,11 @@ ovs-ofctl -O OpenFlow13 dump-flows s2
 
 ovs-vsctl show
 
-${RYU_MANAGER_COMMAND}
+echo -e "\n\n---- In a new terminal launch Snort using the following command -----"
+echo "${SNORT_COMMAND}"
+echo -e "---------------------------------------------------------------------\n\n"
 
-#waitForSnortSocketToBeUp
+
+${RYU_MANAGER_COMMAND}
 
 exit 0

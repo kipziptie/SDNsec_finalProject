@@ -14,5 +14,17 @@ There exists a server hosting a simple web service. Snort interfaces with the fi
 First, to launch the mininet topology perform the following command in the scripts directory:
 
 ```
+sudo bash start_mininet.sh
+```
+
+In a new tab launch the second script that starts the ryu managers:
+
+```
 sudo bash start_manager.sh
+```
+
+Finally, as promted by the second script, open a third terminal and execute the following command that launches snort:
+
+```
+snort -i s1-snort -l /tmp -c /etc/snort/snort.lua -A alert-unixsock
 ```
