@@ -9,7 +9,7 @@ class SdnControllerClient():
     SNORT_VERIFIER_ICMP_FLOOD_THRESHOLD=100
 
     SELF_VERIFIER_QUERY="select MEAN(\"rx-bytes\") from ports WHERE datapath='1' AND time > now() - 10s GROUP BY port;"
-    SELF_VERIFIER_THRESHOLD=10000
+    SELF_VERIFIER_THRESHOLD=100000000
 
     INTERNAL_PORT_TO_S2 = 5
     INTERNAL_PORT_TO_HONEYPOT = 4
@@ -74,15 +74,15 @@ class SdnControllerClient():
         ofproto = self.datapath.ofproto
         parser = self.datapath.ofproto_parser
 
-        actions = [parser.OFPActionOutput(INTERNAL_PORT_TO_HONEYPOT)]
+        actions = [parser.OFPActionOutput(self.INTERNAL_PORT_TO_HONEYPOT)]
 
-        match = parser.OFPMatch(in_port=port_id)
-        self.add_flow(datapath, 100, match, actions)
+        match = parser.OFPMatch(in_port=int(port_id))
+        self.add_flow(self.datapath, 90, match, actions)
 
         print("[Firewall Enforcer]: I will redirect the traffic for port", port_id)
 
     def _enforceRulesBasedOnAttack(self, attack_type, port_id):
-        if ( "TCP" in attack_type ):
+        if ( "SYN" in attack_type ):
             self._redirect_traffic_to_honeypot(port_id)
         else:
             self._block_traffic(port_id)
