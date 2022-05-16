@@ -16,6 +16,9 @@
 from __future__ import print_function
 
 import array
+import requests
+
+from requests.exceptions import ConnectionError
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -48,27 +51,9 @@ class IDS_Application(app_manager.RyuApp):
 
         self.snort.set_config(socket_config)
         self.snort.start_socket_server()
-
-        self.client = SdnControllerClient()
-        self.influx_verifier = hub.spawn(self._influx_verify)
-
-    def _influx_verify(self):
-        hub.sleep(10)
-
-        self.logger.info("Start monitoring")
-        while True:
-            self.client.monitor_received_bytes_and_react()
-            hub.sleep(10)
-
-    @set_ev_cls(snortlib.EventAlert, MAIN_DISPATCHER)
-    def _dump_alert(self, ev):
-        msg = ev.msg
-        #print('alertmsg: %s' % msg.alertmsg[0].decode())
-        self.client.verify_number_of_packets(msg.alertmsg[0].decode())
-        
-
+    
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
-    def switch_features_handler(self, ev):
+    def handler_datapath(self, ev):
         datapath = ev.msg.datapath
         
         if ( datapath.id == 1 ):
@@ -80,6 +65,64 @@ class IDS_Application(app_manager.RyuApp):
                                             ofproto.OFPCML_NO_BUFFER)]
             self.add_flow(datapath, 0, match, actions)
 
+            self._initialise_firewall_rules()
+
+            self.client = SdnControllerClient(datapath)
+            self.influx_verifier = hub.spawn(self._influx_verify)
+
+    def _initialise_firewall_rules(self):
+
+        host_is_up = False
+
+        while not host_is_up:
+            try:
+                v = requests.get('http://localhost:8080/firewall/module/status')
+                host_is_up = True    
+            except ConnectionError:
+                print("Firewall Rest API is down. Sleeping and retrying")
+                hub.sleep(10)        
+
+        self._perform_request('PUT', 'http://localhost:8080/firewall/module/enable/0000000000000001')
+        self._perform_request('PUT', 'http://localhost:8080/firewall/module/enable/0000000000000002')
+
+        self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000001', '{"nw_src": "10.0.0.5/32"}')
+        self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000001', '{"nw_dst": "10.0.0.5/32"}')
+
+        self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000002', '{"nw_src": "10.0.0.5/32"}')
+        self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000002', '{"nw_dst": "10.0.0.5/32"}')
+
+        
+
+    def _perform_request(self, type, url, data=None):
+
+        if (type == "GET"):
+            result = requests.get(url)
+        elif (type == "PUT"):
+            result = requests.put(url)
+        elif (type == "POST"):
+            result = requests.post(url, data=data)
+        else:
+            result = requests.delete(url)
+
+        if (result.status_code != 200):
+            raise Exception("Failed to perform request: "+result.status_code)
+
+        return result.text
+
+
+
+    def _influx_verify(self):
+        self.logger.info("Start monitoring")
+        while True:
+            self.client.monitor_received_bytes_and_react()
+            hub.sleep(10)
+
+    @set_ev_cls(snortlib.EventAlert, MAIN_DISPATCHER)
+    def _dump_alert(self, ev):
+        msg = ev.msg
+        #print('alertmsg: %s' % msg.alertmsg[0].decode())
+        self.client.verify_number_of_packets(msg.alertmsg[0].decode())
+        
     def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -90,44 +133,3 @@ class IDS_Application(app_manager.RyuApp):
         mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                 match=match, instructions=inst)
         datapath.send_msg(mod)
-
-    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def _packet_in_handler(self, ev):
-        msg = ev.msg
-        datapath = msg.datapath
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        in_port = msg.match['in_port']
-
-        pkt = packet.Packet(msg.data)
-        eth = pkt.get_protocols(ethernet.ethernet)[0]
-
-        dst = eth.dst
-        src = eth.src
-
-        dpid = datapath.id
-        if ( dpid == 1 ):
-            self.mac_to_port.setdefault(dpid, {})
-
-            self.mac_to_port[dpid][src] = in_port
-
-            if dst in self.mac_to_port[dpid]:
-                out_port = self.mac_to_port[dpid][dst]
-            else:
-                out_port = ofproto.OFPP_FLOOD
-
-            actions = [parser.OFPActionOutput(out_port),
-                    parser.OFPActionOutput(self.snort_port)]
-
-            # install a flow to avoid packet_in next time
-            if out_port != ofproto.OFPP_FLOOD:
-                match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
-                self.add_flow(datapath, 10, match, actions)
-
-            data = None
-            if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-                data = msg.data
-
-            out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-                                    in_port=in_port, actions=actions, data=data)
-            datapath.send_msg(out)

@@ -13,8 +13,8 @@ PKTS_LEN = 1442
 DATA_LEN = 1000000
 DATA_STR = 'MB'
 INIT_WAIT = 1
-ICMP_DDoS = False
-TCP_DDoS = True
+ICMP_DDoS = True
+TCP_DDoS = False
 
 
 # Get the current time 

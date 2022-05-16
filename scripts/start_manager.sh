@@ -5,7 +5,7 @@ PYTHON_DIRECTORY="${HOME_DIRECTORY}/python"
 SDN_DIRECTORY="${PYTHON_DIRECTORY}/sdn"
 
 SNORT_INTERFACE="s1-snort"
-SNORT_COMMAND="snort -i ${SNORT_INTERFACE} -l /tmp -c /etc/snort/snort.lua -A alert-unixsock"
+SNORT_COMMAND="snort -i ${SNORT_INTERFACE} -l /tmp -c /etc/snort/snort.lua -A alert_unixsock"
 SNORT_LOGS="snort.logs"
 
 RYU_MANAGER_COMMAND="ryu-manager ${SDN_DIRECTORY}/core_controller.py ${SDN_DIRECTORY}/application.py"
