@@ -357,14 +357,12 @@ class CoreController(app_manager.RyuApp):
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
     def handler_datapath(self, ev):
-        if ev.enter:
-            FirewallController.regist_ofs(ev.dp)
-
-            if (ev.dp.id == 1):
+        if(ev.dp.id == FIREWALL_SWITCH_DP_ID):
+            if ev.enter:
+                FirewallController.regist_ofs(ev.dp)
                 self.monitor_thread = hub.spawn(self._monitor, ev.dp)
-        else:
-            FirewallController.unregist_ofs(ev.dp)
-            if (ev.dp.id == 1):
+            else:
+                FirewallController.unregist_ofs(ev.dp)
                 FirewallController._LOGGER.info('Kill influxdb service')
                 hub.kill(self.monitor_thread)
 
@@ -377,11 +375,6 @@ class CoreController(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPStatsReply, MAIN_DISPATCHER)
     def stats_reply_handler_v1_2(self, ev):
         self.stats_reply_handler(ev)
-
-    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def packet_in_handler(self, ev):
-        FirewallController.packet_in_handler(ev.msg)
-
 
 class FirewallOfsList(dict):
     def __init__(self):
@@ -593,14 +586,6 @@ class FirewallController(ControllerBase):
                                                                 VLANID_MAX)
                 raise ValueError(msg)
         return vlan_id
-
-    @staticmethod
-    def packet_in_handler(msg):
-        pkt = packet.Packet(msg.data)
-        dpid_str = dpid_lib.dpid_to_str(msg.datapath.id)
-        FirewallController._LOGGER.info('dpid=%s: Blocked packet = %s',
-                                        dpid_str, pkt)
-
 
 class Firewall(object):
 

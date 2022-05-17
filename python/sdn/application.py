@@ -25,6 +25,14 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 
+from ryu.app.wsgi import ControllerBase
+from ryu.app.wsgi import Response
+from ryu.app.wsgi import route
+from ryu.app.wsgi import WSGIApplication
+
+import json
+
+
 from ryu.ofproto import ofproto_v1_3
 
 from ryu.lib.packet import packet
@@ -37,9 +45,11 @@ from ryu.lib import hub
 
 from components.SdnControllerClient import SdnControllerClient
 
+ids_app_instance_name = 'ids_api_app'
+
 class IDS_Application(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    _CONTEXTS = {'snortlib': snortlib.SnortLib}
+    _CONTEXTS = {'snortlib': snortlib.SnortLib, 'wsgi': WSGIApplication}
 
     def __init__(self, *args, **kwargs):
         super(IDS_Application, self).__init__(*args, **kwargs)
@@ -51,6 +61,10 @@ class IDS_Application(app_manager.RyuApp):
 
         self.snort.set_config(socket_config)
         self.snort.start_socket_server()
+
+        wsgi = kwargs['wsgi']
+        wsgi.register(IDSConstroller,
+                      {ids_app_instance_name: self})
     
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def handler_datapath(self, ev):
@@ -83,13 +97,8 @@ class IDS_Application(app_manager.RyuApp):
                 hub.sleep(10)        
 
         self._perform_request('PUT', 'http://localhost:8080/firewall/module/enable/0000000000000001')
-        self._perform_request('PUT', 'http://localhost:8080/firewall/module/enable/0000000000000002')
-
         self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000001', '{"nw_src": "10.0.0.5/32"}')
         self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000001', '{"nw_dst": "10.0.0.5/32"}')
-
-        self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000002', '{"nw_src": "10.0.0.5/32"}')
-        self._perform_request('POST', 'http://localhost:8080/firewall/rules/0000000000000002', '{"nw_dst": "10.0.0.5/32"}')
 
         
 
@@ -108,8 +117,6 @@ class IDS_Application(app_manager.RyuApp):
             raise Exception("Failed to perform request: "+result.status_code)
 
         return result.text
-
-
 
     def _influx_verify(self):
         self.logger.info("Start monitoring")
@@ -133,3 +140,38 @@ class IDS_Application(app_manager.RyuApp):
         mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                 match=match, instructions=inst)
         datapath.send_msg(mod)
+
+class IDSConstroller(ControllerBase):
+
+    def __init__(self, req, link, data, **config):
+        super(IDSConstroller, self).__init__(req, link, data, **config)
+        self.ids_app = data[ids_app_instance_name]
+
+    @route('ids', '/ids/alert-table', methods=['GET'])
+    def list_alert_table(self, req, **kwargs):
+
+        ids_app = self.ids_app
+
+        body = json.dumps(ids_app.client.alert_cache)
+        return Response(content_type='application/json', text=body)
+
+    @route('ids', "/ids/alert-table/{portid}", methods=['DELETE'], requirements={'portid': '\d+'})
+    def put_mac_table(self, req, **kwargs):
+
+        ids_app = self.ids_app
+        alert_table = ids_app.client.alert_cache
+
+        port_id = kwargs['portid']
+
+        if (port_id in ["4", "5"]):
+            return Response(status=400, text="Cannot delete alert rules for internal ports")
+
+        if port_id not in alert_table:
+            return Response(status=404)
+
+        try:
+            del alert_table[port_id]
+            body = json.dumps(alert_table)
+            return Response(content_type='application/json', text=body)
+        except Exception as e:
+            return Response(status=500)

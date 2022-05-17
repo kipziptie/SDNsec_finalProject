@@ -4,12 +4,12 @@ import requests
 
 class SdnControllerClient():
 
-    SNORT_VERIFIER_QUERY="select SUM(\"rx-pkts\") from ports WHERE datapath='1' AND time > now() - 1m GROUP BY port;"
+    SNORT_VERIFIER_QUERY="select SUM(\"rx-pkts\") from ports WHERE datapath='1' AND time > now() - 30s GROUP BY port;"
     SNORT_VERIFIER_TCP_FLOOD_THRESHOLD=500
-    SNORT_VERIFIER_ICMP_FLOOD_THRESHOLD=100
+    SNORT_VERIFIER_ICMP_FLOOD_THRESHOLD=600
 
     SELF_VERIFIER_QUERY="select MEAN(\"rx-bytes\") from ports WHERE datapath='1' AND time > now() - 10s GROUP BY port;"
-    SELF_VERIFIER_THRESHOLD=100000000
+    SELF_VERIFIER_THRESHOLD=3000
 
     INTERNAL_PORT_TO_S2 = 5
     INTERNAL_PORT_TO_HONEYPOT = 4
@@ -32,7 +32,7 @@ class SdnControllerClient():
             average_rx_bytes = list(result_set.get_points(measurement='ports', tags={"port": port_id}))[0]["mean"]
 
             if(average_rx_bytes > self.SELF_VERIFIER_THRESHOLD and not port_id in self.alert_cache):
-                print("Found alert")
+                print("[CUSTOM-IDS][INFO] Discovered heavy traffic during periodic check.")
                 self._enforceRulesBasedOnAttack("average_bytes_exceeded", port_id)
                 self.alert_cache[port_id] = 1
 
@@ -48,9 +48,6 @@ class SdnControllerClient():
             raise_alarm_for_tcp_flood = "SYN" in alert_message and int(sum_rx_packets) > self.SNORT_VERIFIER_TCP_FLOOD_THRESHOLD
             raise_alarm_for_icmp_flood = "ICMP" in alert_message and int(sum_rx_packets) > self.SNORT_VERIFIER_ICMP_FLOOD_THRESHOLD
 
-            if (port_id == "1" or port_id == "2"):
-                print(raise_alarm_for_icmp_flood, raise_alarm_for_tcp_flood, alert_message, sum_rx_packets)
-
             if (port_id in self.alert_cache):
                 continue
 
@@ -59,15 +56,14 @@ class SdnControllerClient():
                 self.alert_cache[port_id] = 1
                 print(alert_message)
 
-    def _block_traffic(self, port_id):
-        data='{"in_port": "' + str(port_id) + '", "nw_proto": "ICMP", "dl_type": "IPv4", "actions": "DENY", "priority": 100}'
+    def _block_tcp_traffic(self, port_id):
+        data='{"in_port": "' + str(port_id) + '", "nw_proto": "TCP", "dl_type": "IPv4", "actions": "DENY", "priority": 100}'
         result = requests.post('http://localhost:8080/firewall/rules/0000000000000001', data=data)
         if (result.status_code != 200):
             raise Exception("Failed to perform request: "+str(result.status_code))
 
         print(result.text)
-
-        print("[Firewall Enforcer]: I will block the traffic for port", port_id)
+        print("[Firewall Enforcer][INFO]: I will block the traffic from port", port_id)
 
 
     def _redirect_traffic_to_honeypot(self, port_id):
@@ -78,14 +74,13 @@ class SdnControllerClient():
 
         match = parser.OFPMatch(in_port=int(port_id))
         self.add_flow(self.datapath, 90, match, actions)
-
-        print("[Firewall Enforcer]: I will redirect the traffic for port", port_id)
+        print("[Firewall Enforcer][INFO]: I will redirect the traffic from port to the honeypot server", port_id)
 
     def _enforceRulesBasedOnAttack(self, attack_type, port_id):
-        if ( "SYN" in attack_type ):
+        if ( "ICMP" in attack_type ):
             self._redirect_traffic_to_honeypot(port_id)
         else:
-            self._block_traffic(port_id)
+            self._block_tcp_traffic(port_id)
 
     def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto
@@ -97,3 +92,6 @@ class SdnControllerClient():
         mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                 match=match, instructions=inst)
         datapath.send_msg(mod)
+
+    def flush_cache(self):
+        self.alert_cache={}
