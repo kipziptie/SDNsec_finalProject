@@ -65,6 +65,15 @@ class SdnControllerClient():
         print(result.text)
         print("[Firewall Enforcer][INFO]: I will block the traffic from port", port_id)
 
+    def _block_icmp_traffic(self, port_id):
+        data='{"in_port": "' + str(port_id) + '", "nw_proto": "ICMP", "dl_type": "IPv4", "actions": "DENY", "priority": 100}'
+        result = requests.post('http://localhost:8080/firewall/rules/0000000000000001', data=data)
+        if (result.status_code != 200):
+            raise Exception("Failed to perform request: "+str(result.status_code))
+
+        print(result.text)
+        print("[Firewall Enforcer][INFO]: I will block the traffic from port", port_id)   
+
 
     def _redirect_traffic_to_honeypot(self, port_id):
         ofproto = self.datapath.ofproto
@@ -79,6 +88,8 @@ class SdnControllerClient():
     def _enforceRulesBasedOnAttack(self, attack_type, port_id):
         if ( "ICMP" in attack_type ):
             self._redirect_traffic_to_honeypot(port_id)
+        elif( "average_bytes_exceeded" in attack_type ):
+            self._block_icmp_traffic(port_id)
         else:
             self._block_tcp_traffic(port_id)
 
