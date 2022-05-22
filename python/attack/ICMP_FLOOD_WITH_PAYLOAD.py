@@ -5,10 +5,9 @@ target_port = 80
 
 ip = IP(dst=target_ip)
 
-
 icmp = ICMP()
-lol = Raw(b"lol"*340)
+lol = Raw(b"lol"*3400)
 
 packet = ip / icmp / lol
 
-send(packet,loop=1,verbose=1)
+send(packet,loop=0,verbose=1)

