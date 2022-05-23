@@ -15,4 +15,4 @@ while True:
 	#response.summary()
 	if response == None:
 		print("\nNO RESPONSE. HOST IS DOWN\n")
-		break
+		# break
