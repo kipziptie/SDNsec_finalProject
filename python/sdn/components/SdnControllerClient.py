@@ -36,8 +36,13 @@ class SdnControllerClient():
             max_rx_packets = list(result_set.get_points(measurement='ports', tags={"port": port_id}))[0]["max"]
             min_rx_packets = list(result_set.get_points(measurement='ports', tags={"port": port_id}))[0]["min"]
 
-            raise_alarm_for_tcp_flood = "SYN" in alert_message and int(max_rx_packets) - int(min_rx_packets) > self.SNORT_VERIFIER_TCP_FLOOD_THRESHOLD
-            raise_alarm_for_icmp_flood = "ICMP" in alert_message and int(max_rx_packets) - int(min_rx_packets) > self.SNORT_VERIFIER_ICMP_FLOOD_THRESHOLD
+
+            if (isinstance(max_rx_packets, int) and isinstance(min_rx_packets, int)):
+                raise_alarm_for_tcp_flood = "SYN" in alert_message and int(max_rx_packets) - int(min_rx_packets) > self.SNORT_VERIFIER_TCP_FLOOD_THRESHOLD
+                raise_alarm_for_icmp_flood = "ICMP" in alert_message and int(max_rx_packets) - int(min_rx_packets) > self.SNORT_VERIFIER_ICMP_FLOOD_THRESHOLD
+            else:
+                raise_alarm_for_tcp_flood = False
+                raise_alarm_for_icmp_flood = False
 
             if (port_id in self.alert_cache):
                 continue
@@ -60,8 +65,6 @@ class SdnControllerClient():
             
             delta_rx_bytes = average_rx_bytes - self.rx_bytes_table[port_id]
             self.rx_bytes_table[port_id] = average_rx_bytes
-
-            #print(port_id, delta_rx_bytes)
 
             if(delta_rx_bytes > self.SELF_VERIFIER_THRESHOLD and not port_id in self.alert_cache):
                 print("[CUSTOM-IDS][INFO] Discovered heavy traffic during periodic check.")
